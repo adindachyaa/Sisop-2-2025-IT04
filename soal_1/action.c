@@ -17,7 +17,7 @@ void filter() {
 void combine() {
     DIR *dir = opendir("Filtered");
     if(!dir){
-        printf("Can't find Filtered directory. \n");
+        printf("Can't find Filtered directory. Make sure you filter first! \n");
         return;
     }
 
