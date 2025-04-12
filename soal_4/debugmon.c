@@ -1,11 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <pwd.h>
-#include <fcntl.h>
+#include <dirent.h>     
+#include <ctype.h>     
+#include <unistd.h>      
+#include <signal.h>     
+#include <pwd.h>       
+#include <sys/types.h>  
+#include <sys/stat.h>
 #include <time.h>
+#include <fcntl.h>
+#define FAIL_FLAG "/tmp/debugmon_failed.flag"
+
 
 // ----- BAGIAN A: Mengetahui Semua Aktivitas User -----
 void list_processes(const char *username) {
@@ -140,6 +146,130 @@ void run_daemon(const char *username) {
 
     close(log_fd);
 }
+// BAGIAN 3: Menghentikan Pengawassan
+void stop(const char* username){
+    FILE *pid_file;
+    pid_t pid;
+    char pid_filename[64];
+    snprintf(pid_filename, sizeof(pid_filename), "debugmon_%s.pid", username);
+    
+    pid_file = fopen(pid_filename, "r");
+
+    if(!pid_file){
+        fprintf(stderr, "Can't find PID file! Make sure daemon running");
+        return;
+    }
+
+    if(fscanf(pid_file, "%d", &pid) != 1){
+        fprintf(stderr, "Fail to read PID! \n");
+        fclose(pid_file);
+        return;
+    }
+
+    fclose(pid_file);
+    if (kill(pid, SIGTERM) == 0) {
+        printf("Succesfully stopped user %s (PID: %d) Debugmon\n", username, pid);
+        remove(pid_filename); 
+    } else {
+        perror("Fail to stop process...");
+    }
+} 
+
+uid_t get_uid(const char* username) {
+    struct passwd *pwd = getpwnam(username);
+    if (!pwd) {
+        fprintf(stderr, "User %s not found.\n", username);
+        exit(EXIT_FAILURE);
+    }
+    return pwd->pw_uid;
+}
+
+void fail(const char* username){
+    DIR *proc;
+    proc = opendir("/proc");
+    struct dirent *entry;
+    uid_t target_uid = get_uid(username);
+
+    char logpath[256];
+    snprintf(logpath, sizeof(logpath), "logs/%s.log", username);
+    FILE *logfile = fopen(logpath, "a");
+
+    if (!logfile) {
+        perror("Fail to open logfile");
+        closedir(proc);
+        return;
+    }
+
+    while ((entry = readdir(proc)) != NULL) {
+        if (!isdigit(entry->d_name[0])) continue;
+
+        char status_path[256];
+        snprintf(status_path, sizeof(status_path), "/proc/%s/status", entry->d_name);
+
+        FILE *status_file = fopen(status_path, "r");
+        if (!status_file) continue;
+
+        char line[256];
+        uid_t uid = -1;
+        char cmdline[256] = "unknown";
+
+        while (fgets(line, sizeof(line), status_file)) {
+            if (strncmp(line, "Uid:", 4) == 0) {
+                sscanf(line, "Uid:\t%u", &uid);
+            } else if (strncmp(line, "Name:", 5) == 0) {
+                sscanf(line, "Name:\t%255s", cmdline);
+            }
+        }
+        fclose(status_file);
+
+        if (uid == target_uid) {
+            pid_t pid = atoi(entry->d_name);
+            if (kill(pid, SIGKILL) == 0) {
+                fprintf(logfile, "[FAILED] PID %d (command: %s)\n", pid, cmdline);
+                printf("Killed PID %d (%s)\n", pid, cmdline);
+            } else {
+                fprintf(logfile, "[ERROR] Failed killing PID %d (%s)\n", pid, cmdline);
+            }
+        }
+    }
+
+    fclose(logfile);
+    closedir(proc);
+}
+
+// ----- BAGIAN E: Mengizinkan User Kembali Menjalankan Proses -----
+void revert(const char *username) {
+    printf("Mode normal dipulihkan untuk user %s. Proses baru dapat dijalankan kembali.\n", username);
+    
+    char log_entry[256];
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(log_entry, sizeof(log_entry), "[%d:%m:%Y]-[%H:%M:%S]_%s_REVERT\n", t);
+    FILE *logFile = fopen("debugmon.log", "a");
+    if (logFile != NULL) {
+        fprintf(logFile, "%s", log_entry);
+        fclose(logFile);
+    }
+}
+
+// ----- BAGIAN F: Mencatat ke dalam File Log -----
+void writeLog(const char *processName, const char *status) {
+    FILE *logFile = fopen("debugmon.log", "a");
+    if (logFile == NULL) {
+        perror("Gagal membuka file log");
+        return;
+    }
+
+    char timestamp[100];
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(timestamp, sizeof(timestamp), "[%d:%m:%Y]-[%H:%M:%S]", t);
+
+    fprintf(logFile, "%s_%s_%s\n", timestamp, processName, status);
+    fclose(logFile);
+}
+
+
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -154,7 +284,16 @@ int main(int argc, char *argv[]) {
         list_processes(username);
     } else if (strcmp(command, "daemon") == 0) {
         run_daemon(username);
-    } else {
+    } else if (strcmp(command, "stop") == 0) {
+        stop(username);
+    } 
+    else if (strcmp(command, "fail") == 0) {
+        fail(username);
+    } 
+    else if (strcmp(command, "revert") == 0) {
+        revert(username);
+    }
+    else {
         fprintf(stderr, "Invalid command. Use 'list' or 'daemon'.\n");
         return EXIT_FAILURE;
     }
