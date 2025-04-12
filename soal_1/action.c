@@ -16,8 +16,13 @@ void filter() {
 
 void combine() {
     DIR *dir = opendir("Filtered");
+    if(!dir){
+        printf("Can't find Filtered directory. \n");
+        return;
+    }
+
     struct dirent *entry;
-    char *num[100], *alpha[100];
+    char *num[10], *alpha[10];
     int num_idx = 0, a_idx = 0;
 
     //categorize file (num or alphabet)
@@ -34,6 +39,29 @@ void combine() {
     }
         closedir(dir);
 
+        //sort number
+        for (int i = 0; i < num_idx - 1; i++) {
+            for (int j = 0; j < num_idx - i - 1; j++) {
+                if (atoi(num[j]) > atoi(num[j + 1])) {
+                    char *temp = num[j];
+                    num[j] = num[j + 1];
+                    num[j + 1] = temp;
+                }
+            }
+        }
+        
+        //sort alphabet
+        for (int i = 0; i < a_idx - 1; i++) {
+            for (int j = 0; j < a_idx - i - 1; j++) {
+                if (strcmp(alpha[j], alpha[j + 1]) > 0) {
+                    char *temp = alpha[j];
+                    alpha[j] = alpha[j + 1];
+                    alpha[j + 1] = temp;
+                }
+            }
+        }
+
+        
         FILE *combined = fopen("Combined.txt", "w");
         char path[256], buffer[256];
         int i = 0;
@@ -69,9 +97,6 @@ void combine() {
                 j++;
             }
         }
-
-    
-
     fclose(combined);
     printf("Combine success. \n");
 }
@@ -97,7 +122,7 @@ void decode(){
     }
     fclose(code);
     fclose(decode);
-    printf("Successfully decoded.");
+    printf("Decode success!");
 }
 
 
