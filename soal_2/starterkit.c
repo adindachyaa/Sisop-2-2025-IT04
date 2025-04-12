@@ -298,12 +298,8 @@ void shutdown_decrypt_daemon() {
 }
 
 int main(int argc, char *argv[]) {
-    if (mkdir(STARTER_KIT_DIR, 0777) == -1 && errno != EEXIST) {
-        perror("/ ❦ . . { ERROR } Gagal membuat starter_kit directory.");
-    }
-    if (mkdir(QUARANTINE_DIR, 0777) == -1 && errno != EEXIST) {
-        perror("/ ❦ . . { ERROR } Gagal membuat quarantine directory.");
-    }
+    mkdir(STARTER_KIT_DIR, 0777);
+    mkdir(QUARANTINE_DIR, 0777);
 
     if (argc < 2) {
         printf("୨♡୧ ... Contoh: ./starterkit --[decrypt|quarantine|return|eradicate|shutdown]\n");
