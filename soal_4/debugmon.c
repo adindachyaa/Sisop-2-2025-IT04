@@ -13,6 +13,50 @@
 #define FAIL_FLAG "/tmp/debugmon_failed.flag"
 
 
+void get_cpu_memory_usage(const char *pid, float *cpu_usage, float *memory_usage) {
+    char path[256];
+    FILE *file;
+    char line[256];
+
+    snprintf(path, sizeof(path), "/proc/%s/stat", pid);
+    file = fopen(path, "r");
+    if (!file) return;
+
+    long unsigned int utime, stime, starttime;
+    long unsigned int total_time;
+    unsigned long vsize;
+    int rss;
+    unsigned long long uptime;
+
+    fscanf(file,
+           "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u "
+           "%lu %lu %*lu %*lu %*lu %lu",
+           &utime, &stime, &starttime);
+    fclose(file);
+
+   
+    total_time = utime + stime;
+
+       file = fopen("/proc/uptime", "r");
+    if (file) {
+        fscanf(file, "%llu", &uptime);
+        fclose(file);
+    }
+
+    *cpu_usage = (total_time * 100.0) / sysconf(_SC_CLK_TCK) / uptime;
+
+   
+    snprintf(path, sizeof(path), "/proc/%s/statm", pid);
+    file = fopen(path, "r");
+    if (file) {
+        fscanf(file, "%lu %d", &vsize, &rss);
+        fclose(file);
+    }
+
+   
+    *memory_usage = rss * (sysconf(_SC_PAGESIZE) / 1024.0 / 1024.0);
+}
+
 // ----- BAGIAN A: Mengetahui Semua Aktivitas User -----
 void list_processes(const char *username) {
     struct passwd *pwd = getpwnam(username);
@@ -27,6 +71,9 @@ void list_processes(const char *username) {
         perror("Error opening /proc");
         return;
     }
+
+    printf("PID\tCommand\t\tCPU(%%)\tMemory(MB)\n");
+    printf("-------------------------------------------------\n");
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
@@ -49,11 +96,12 @@ void list_processes(const char *username) {
                 break;
             }
         }
-
         fclose(status_file);
 
         if (process_uid == uid) {
-            printf("PID: %s | Command: %s\n", entry->d_name, comm);
+            float cpu_usage = 0, memory_usage = 0;
+            get_cpu_memory_usage(entry->d_name, &cpu_usage, &memory_usage);
+            printf("%s\t%-15s%.2f\t%.2f\n", entry->d_name, comm, cpu_usage, memory_usage);
         }
     }
 
@@ -69,23 +117,23 @@ void run_daemon(const char *username) {
     }
 
     if (pid > 0) {
-        exit(EXIT_SUCCESS);
+              exit(EXIT_SUCCESS);
     }
 
+   
     if (setsid() < 0) {
         perror("Error creating session");
         exit(EXIT_FAILURE);
     }
 
-    umask(0);
-    chdir("/");
-
+   
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 
+   
     char log_file[256];
-    snprintf(log_file, sizeof(log_file), "debugmon_%s.log", username);
+    snprintf(log_file, sizeof(log_file), "/tmp/debugmon_%s.log", username);
     int log_fd = open(log_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (log_fd < 0) {
         perror("Error opening log file");
@@ -132,16 +180,18 @@ void run_daemon(const char *username) {
                     break;
                 }
             }
-
             fclose(status_file);
 
             if (process_uid == uid) {
-                dprintf(log_fd, "PID: %s | Command: %s\n", entry->d_name, comm);
+                float cpu_usage = 0, memory_usage = 0;
+                get_cpu_memory_usage(entry->d_name, &cpu_usage, &memory_usage);
+                dprintf(log_fd, "PID: %s | Command: %s | CPU: %.2f%% | Memory: %.2f MB\n",
+                        entry->d_name, comm, cpu_usage, memory_usage);
             }
         }
 
         closedir(dir);
-        sleep(5); 
+        sleep(5); // Monitor every 5 seconds
     }
 
     close(log_fd);
