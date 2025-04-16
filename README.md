@@ -23,7 +23,7 @@ Berikut ini pembagian pengerjaan dari kelompok IT04:
 
 Sehingga dengan demikian, Pembagian bobot pengerjaan soal menjadi (Raya 33.3%, Salsa 33.3%, Dinda 33.3%).
 
-Kelompok IT04 juga telah menyelesaikan tugas praktikum modul 2 yang telah diberikan dan telah melakukan demonstrasi kepada Asisten lab. Dari hasil ikum yang telah dilakukan sebelumnya, maka diperoleh hasil sebagaimana yang dituliskan pada setiap bab di bawah ini.
+Kelompok IT04 juga telah menyelesaikan tugas praktikum modul 2 yang telah diberikan. Dari hasil praktikum yang telah dilakukan sebelumnya, maka diperoleh hasil sebagaimana yang dituliskan pada setiap bab di bawah ini.
 # Ketentuan
 Berikut ini struktur dari repositori praktikum modul 2:
 
