@@ -4,7 +4,7 @@ KELOMPOK IT04
 | No | Nama                              | NRP         |
 |----|-----------------------------------|-------------|
 | 1  | Raya Ahmad Syarif                 | 5027241041  |
-| 2  | Salsa Bil Ula         | 5027241052 |
+| 2  | Salsa Bil Ulla         | 5027241052 |
 | 3  | Adinda Cahya Pramesti   | 5027241117  |
 
 # Pengantar
@@ -14,12 +14,12 @@ Laporan resmi ini dibuat untuk praktikum modul 2 yang dilaksanakan pada tanggal 
 Berikut ini pembagian pengerjaan dari kelompok IT04:
 
     Soal 1 dikerjakan oleh Raya Ahmad Syarif
-    Soal 2 dikerjakan oleh Salsa Bil Ula
+    Soal 2 dikerjakan oleh Salsa Bil Ulla
     Soal 3 dikerjakan oleh Adinda Cahya Pramesti
     Soal 4 dibagi menjadi 3 bagian:
     - 4a & 4b dikerjakan oleh Adinda Cahya Pramesti
     - 4c & 4d dikerjakan oleh Raya Ahmad Syarif
-    - 4e & 4f dikerjakan oleh Salsa Bil Ula
+    - 4e & 4f dikerjakan oleh Salsa Bil Ulla
 
 Sehingga dengan demikian, Pembagian bobot pengerjaan soal menjadi (Raya 33.3%, Salsa 33.3%, Dinda 33.3%).
 
@@ -372,8 +372,58 @@ void decode(){
 Hasil dari combine tadi akan dibuka dan membuka file decode.txt tadi dalam mode write yang mana akan menuliskan hasil decode dari combine. Function ini akan mendecode satu persatu char dalam file combine dengan memanfaatkan function rot13decoder, jika sudah akan ditulis ke file "decode.txt" dan akan menutup kedua file yang sudah dibuka.
 
 ## Soal 2
+Ada seorang perempuan nolep yang bernama Kanade Yoisaki. Beliau adalah siswi SMA yang mengambil kelas online (tipsen dulu ygy) karena malas sekali untuk keluar rumah. Sebagai gantinya, ia bekerja sebagai seorang composer dan hanya tinggal di dalam rumah saja untuk membuat musik secara terus - menerus. Berkat usahanya, musik ciptaan Kanade pun mulai terkenal dan akhirnya Kanade pun membuat sebuah grup musik bernama 25-ji, Nightcord de., atau yang biasa dikenal dengan N25 atau Niigo.
 
-> Penyelesaian
+Pada suatu hari, Kanade ingin membuat sebuah musik baru beserta dengan anggota grup musik lainnya, yaitu Mizuki Akiyama, Mafuyu Asahina, dan Ena Shinonome. Namun sialnya, komputer Kanade terkena sebuah virus yang tidak diketahui. Setelah dianalisis oleh Kanade sendiri, ternyata virus ini bukanlah sebuah trojan, ransomware, maupun tipe virus berbahaya lainnya, melainkan hanya sebuah malware biasa yang hanya bisa membuat sebuah perangkat menjadi lebih lambat dari biasanya. [Author: Haidar / **scar** / **hemorrhager** / 恩赫勒夫]
+
+a. Sebagai teman yang baik, Mafuyu merekomendasikan Kanade untuk **mendownload** dan **unzip** sebuah starter kit berisi file - file acak (sudah termasuk virus) melalui <ins>[link berikut](https://drive.google.com/file/d/1_5GxIGfQr3mNKuavJbte_AoRkEQLXSKS/view)</ins> agar dapat membantu Kanade dalam mengidentifikasi virus - virus yang akan datang. Jangan lupa untuk **menghapus file zip asli** setelah melakukan **unzip**.
+
+b. Setelah mendownload starter kit tersebut, Mafuyu ternyata lupa bahwa pada starter kit tersebut, tidak ada alat untuk **mendecrypt nama** dari file yang diencrypt menggunakan algoritma **Base64**. Oleh karena itu, bantulah Mafuyu untuk **membuat sebuah directory karantina** yang dapat **mendecrypt nama file** yang ada di dalamnya (Hint: gunakan **daemon**).
+Penggunaan:
+   i. ./starterkit --decrypt
+
+c. Karena Kanade adalah orang yang sangat pemalas (kecuali jika membuat musik), maka tambahkan juga **fitur** untuk **memindahkan file** yang ada pada directory starter kit ke directory karantina, dan begitu juga sebaliknya.
+Penggunaan:
+   i. ./starterkit --quarantine (pindahkan file dari directory starter kit ke karantina)
+   ii. ./starterkit --return (pindahkan file dari directory karantina ke starter kit)
+
+d. Ena memberikan ide kepada mereka untuk menambahkan fitur untuk menghapus file - file yang ada pada directory karantina. Mendengar ide yang bagus tersebut, Kanade pun mencoba untuk menambahkan fitur untuk **menghapus seluruh file** yang ada di dalam **directory karantina**.
+Penggunaan:
+   i. ./starterkit --eradicate 
+
+e. Karena tagihan listrik Kanade sudah membengkak dan tidak ingin komputernya menyala secara terus - menerus, ia ingin program decrypt nama file miliknya dapat **dimatikan** secara **aman** berdasarkan **PID** dari **proses** program tersebut.
+Penggunaan:
+   i. ./starterkit --shutdown
+
+f. Mafuyu dan Kanade juga ingin program mereka dapat digunakan dengan aman dan nyaman tanpa membahayakan penggunanya sendiri, mengingat Mizuki yang masih linglung setelah keluar dari labirin Santerra De Laponte. Oleh karena itu, tambahkan **error handling** sederhana untuk mencegah penggunaan yang salah pada program tersebut.
+
+g. Terakhir, untuk **mencatat** setiap penggunaan program ini, Kanade beserta Mafuyu ingin menambahkan **log** dari **setiap penggunaan** program ini dan **menyimpannya** ke dalam file bernama **activity.log**.
+Format:
+   i. Decrypt: 
+[dd-mm-YYYY][HH:MM:SS] - Successfully started decryption process with PID <pid>.
+
+   ii. Quarantine:
+[dd-mm-YYYY][HH:MM:SS] - <nama file> - Successfully moved to quarantine directory.
+
+   iii. Return:
+[dd-mm-YYYY][HH:MM:SS] - <nama file> - Successfully returned to starter kit directory.
+
+   iv. Eradicate:
+[dd-mm-YYYY][HH:MM:SS] - <nama file> - Successfully deleted.
+
+   v. Shutdown:
+[dd-mm-YYYY][HH:MM:SS] - Successfully shut off decryption process with PID <pid>.
+
+Contoh struktur akhir directory untuk soal ini adalah sebagai berikut.
+**soal_2**
+    ├── **activity.log**
+    ├── **quarantine**
+    ├── **starter_kit**
+    │           └── <file hasil unzip>
+    ├── **starterkit**
+    └── **starterkit.c**
+
+### > Penyelesaian
 ```
 #include <stdio.h>
 #include <string.h>
@@ -675,12 +725,8 @@ void shutdown_decrypt_daemon() {
 }
 
 int main(int argc, char *argv[]) {
-    if (mkdir(STARTER_KIT_DIR, 0777) == -1 && errno != EEXIST) {
-        perror("/ ❦ . . { ERROR } Gagal membuat starter_kit directory.");
-    }
-    if (mkdir(QUARANTINE_DIR, 0777) == -1 && errno != EEXIST) {
-        perror("/ ❦ . . { ERROR } Gagal membuat quarantine directory.");
-    }
+    mkdir(STARTER_KIT_DIR, 0777);
+    mkdir(QUARANTINE_DIR, 0777);
 
     if (argc < 2) {
         printf("୨♡୧ ... Contoh: ./starterkit --[decrypt|quarantine|return|eradicate|shutdown]\n");
@@ -710,3 +756,34 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 ```
+
+### > Penjelasan
+1. Buat `starterkit.c`
+```
+touch starterkit.c
+```
+2. Tambahkan library yang dibutuhkan
+```
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <dirent.h>
+#include <time.h>
+#include <signal.h>
+```
+`stdio.h` = Untuk operasi input/output standar, seperti `printf`, `scanf`, `fopen`, `fgets`, dll.
+`string.h` =
+`stdlib.h` =
+`unistd.h` =
+`sys/types.h` =
+`sys/wait.h` =
+`sys/stat.h` =
+`fcntl.h` =
+`dirent.h` =
+`time.h` =
+`signal.h` =
