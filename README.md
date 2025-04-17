@@ -45,7 +45,7 @@ Ia merupakan naga bernama Cyrus yang menjaga pintu tersebut dan kamu harus meng-
 
 > Penyelesaian
 ```
-                                                                   #include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
