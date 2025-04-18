@@ -1116,6 +1116,8 @@ void daemon_mode(const char* user) {
     }
 }
 ```
+> Output
+> ![WhatsApp Image 2025-04-18 at 17 18 19_fcb8acdf](https://github.com/user-attachments/assets/61a6448a-467a-40cf-bab3-788f0d6efd5c)
 
 ### > Penjelasan
 
