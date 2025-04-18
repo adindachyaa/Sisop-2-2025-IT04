@@ -246,6 +246,71 @@ void filter() {
         printf("Filter Completed.");
 }
 ```
+Fungsi ini digunakan untuk filtering hasil ekstraksi fille "clues.zip" dengan kriteria satu digit huruf dan angka.
+[REVISI]
+```
+void filter() {
+        DIR *dir = opendir("Clues");
+        struct dirent *entry;
+        if(!dir) { 
+            perror("Failed to open, make sure u have extracted the zip file \n");
+            return;
+        }
+        mkdir("Filtered", 0755); 
+        printf("Filtered Directory Created.\n");
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                continue;
+
+            char subfolder[256];
+            snprintf(subfolder, sizeof(subfolder), "Clues/%s", entry->d_name);
+    
+            struct stat st;
+            if (stat(subfolder, &st) == -1 || !S_ISDIR(st.st_mode))
+                continue;
+    
+            DIR *subdir = opendir(subfolder);
+            if (!subdir) continue;
+    
+            struct dirent *subentry;
+            while ((subentry = readdir(subdir)) != NULL) {
+                if (strcmp(subentry->d_name, ".") == 0 || strcmp(subentry->d_name, "..") == 0)
+                    continue;
+    
+                char filepath[256];
+                snprintf(filepath, sizeof(filepath), "%s/%s", subfolder, subentry->d_name);
+    
+                struct stat file_st;
+                if (stat(filepath, &file_st) == -1)
+                    continue;
+    
+                if (S_ISREG(file_st.st_mode)) {
+                    int len = strlen(subentry->d_name);
+    
+                    if (len == 5 && subentry->d_name[1] == '.' &&
+                        subentry->d_name[2] == 't' &&
+                        subentry->d_name[3] == 'x' &&
+                        subentry->d_name[4] == 't' &&
+                        isalnum(subentry->d_name[0])) {
+
+                        char destpath[256];
+                        snprintf(destpath, sizeof(destpath), "Filtered/%s", subentry->d_name);
+                        if (rename(filepath, destpath) == 0)
+                            printf("Moved file: %s\n", subentry->d_name);
+                        else
+                            perror("Failed to move file");
+                    } else {
+                        if (remove(filepath) == 0)
+                            printf("Deleted file: %s\n", subentry->d_name);
+                        else
+                            perror("Failed to delete file");
+                    }
+                }
+            }
+        }
+        printf("Filter Completed.");
+}
+```
 Filter di sini untuk membuat folder "Filtered" yang akan digunakan untuk menyimpan file .txt hasil filter. Function ini juga digunakan untuk mem-filter file.txt sesuai dengan kriterianya yaitu filenamenya hanya mengandung satu huruf dan satu angka lalu menghapus file yang tidak memenuhi kriteria.
 4. Function combine
 ```
@@ -370,6 +435,68 @@ void decode(){
 
 ```
 Hasil dari combine tadi akan dibuka dan membuka file decode.txt tadi dalam mode write yang mana akan menuliskan hasil decode dari combine. Function ini akan mendecode satu persatu char dalam file combine dengan memanfaatkan function rot13decoder, jika sudah akan ditulis ke file "decode.txt" dan akan menutup kedua file yang sudah dibuka.
+
+6. Function main
+```
+
+int main(int argc, char *argv[]) {
+    if(argc == 3){
+        if(strcmp(argv[1], "-m") == 0){
+            if(strcmp(argv[2], "Filter") == 0){
+                filter();
+            }else if(strcmp(argv[2], "Combine") == 0){
+                combine();
+                }
+            else if(strcmp(argv[2], "Decode") == 0){
+                decode();
+            }
+        else{
+                printf("please input the right mode \n");
+            }
+        }
+    }
+    else{
+        if(!clue_folder("Clues")){
+            pid_t pid1 = fork();
+            if (pid1 == 0) {
+                char *wget_args[] = {
+                    "wget",
+                    "--no-check-certificate",
+                    "https://docs.google.com/uc?export=download&id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK",
+                    "-O", "clue.zip",
+                    NULL
+                };
+                execvp("wget", wget_args);
+                perror("wget failed");
+                exit(EXIT_FAILURE);
+            }
+            waitpid(pid1, NULL, 0);
+
+            pid_t pid2 = fork();
+            if (pid2 == 0) {
+                char *unzip_args[] = {"unzip", "clue.zip", NULL};
+                execvp("unzip", unzip_args);
+                perror("unzip failed");
+                exit(EXIT_FAILURE);
+            }
+            waitpid(pid2, NULL, 0);
+
+            pid_t pid3 = fork();
+            if (pid3 == 0) {
+                char *rm_args[] = {"rm", "clue.zip", NULL};
+                execvp("rm", rm_args);
+                perror("rm failed");
+                exit(EXIT_FAILURE);
+            }
+            waitpid(pid3, NULL, 0);
+    } else {
+            printf("Clues folder has been extracted. \n");
+        }
+    }
+    return 0;
+}
+```
+Di function main ini terdapat argc dan argv untuk penerimaan argumen pada saat di-run. Di situ juga ada kondisi apabila folder "Clues" belum ditemukan akan mendownload dan mengekstrak file Clues.zip.
 
 ## Soal 2
 Ada seorang perempuan nolep yang bernama Kanade Yoisaki. Beliau adalah siswi SMA yang mengambil kelas online (tipsen dulu ygy) karena malas sekali untuk keluar rumah. Sebagai gantinya, ia bekerja sebagai seorang composer dan hanya tinggal di dalam rumah saja untuk membuat musik secara terus - menerus. Berkat usahanya, musik ciptaan Kanade pun mulai terkenal dan akhirnya Kanade pun membuat sebuah grup musik bernama 25-ji, Nightcord de., atau yang biasa dikenal dengan N25 atau Niigo.
