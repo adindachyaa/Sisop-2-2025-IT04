@@ -897,6 +897,8 @@ void list_user_processes(const char *username) {
     closedir(proc_dir);
 }
 ```
+### Output
+![image](https://github.com/user-attachments/assets/7e837613-c9d7-48d9-a0c1-6dfbba537a40)
 
 ### > Penjelasan
 #### 1. Deklarasi Variabel dan Direktori
