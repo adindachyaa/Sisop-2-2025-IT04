@@ -1264,9 +1264,442 @@ Untuk setiap proses:
 Lalu proses ini dilakukan terus-menerus setiap 10 detik.
 
 ### C. Menghentikan pengawasan
+```
+void stop(const char* username){
+    FILE *pid_file;
+    pid_t pid;
+    char pid_filename[64];
+    snprintf(pid_filename, sizeof(pid_filename), "debugmon_%s.pid", username);
+    
+    pid_file = fopen(pid_filename, "r");
+
+    if(!pid_file){
+        fprintf(stderr, "Can't find PID file! Make sure daemon running");
+        return;
+    }
+
+    if(fscanf(pid_file, "%d", &pid) != 1){
+        fprintf(stderr, "Fail to read PID! \n");
+        fclose(pid_file);
+        return;
+    }
+
+    fclose(pid_file);
+    if (kill(pid, SIGTERM) == 0) {
+        printf("Succesfully stopped user %s (PID: %d) Debugmon\n", username, pid);
+        remove(pid_filename); 
+    } else {
+        perror("Fail to stop process...");
+    }
+} 
+
+uid_t get_uid(const char* username) {
+    struct passwd *pwd = getpwnam(username);
+    if (!pwd) {
+        fprintf(stderr, "User %s not found.\n", username);
+        exit(EXIT_FAILURE);
+    }
+    return pwd->pw_uid;
+}
+```
+### Penjelasan
+#### 1. Fungsi stop
+```
+void stop(const char* username){
+    FILE *pid_file;
+    pid_t pid;
+    char pid_filename[64];
+    snprintf(pid_filename, sizeof(pid_filename), "debugmon_%s.pid", username);
+```
+- Untuk membentuk nama file PID `(debugmon_[username].pid)`
+ - Untuk untuk menyimpan PID dari daemon milik pengguna tertentu.
+
+```
+    pid_file = fopen(pid_filename, "r");
+    if(!pid_file){
+        fprintf(stderr, "Can't find PID file! Make sure daemon running");
+        return;
+    }
+```
+- Membuka file PID untuk membaca PID daemon yang sedang berjalan.
+
+- Jika file tidak ditemukan, maka kemungkinan daemon belum berjalan, dan pesan error akan ditampilkan.
+```
+    if(fscanf(pid_file, "%d", &pid) != 1){
+        fprintf(stderr, "Fail to read PID! \n");
+        fclose(pid_file);
+        return;
+    }
+ ```
+
+Untuk membaca PID dari file. Jika gagal membaca data, fungsi akan keluar dengan pesan error.
+
+```
+    fclose(pid_file);
+    if (kill(pid, SIGTERM) == 0) {
+        printf("Succesfully stopped user %s (PID: %d) Debugmon\n", username, pid);
+        remove(pid_filename); 
+    } else {
+        perror("Fail to stop process...");
+    }
+```
+- Akan mengirim sinyal SIGTERM ke PID yang diambil dari file, untuk menghentikan daemon.
+
+- Jika penghentian berhasil, file PID akan dihapus. Jika gagal, pesan error akan ditampilkan.
+
+#### 2. Fungsi get_uid
+```
+uid_t get_uid(const char* username) {
+    struct passwd *pwd = getpwnam(username);
+    if (!pwd) {
+        fprintf(stderr, "User %s not found.\n", username);
+        exit(EXIT_FAILURE);
+    }
+    return pwd->pw_uid;
+}
+```
+- Fungsi ini untuk mendapatkan UID (User ID) dari username yang diberikan.
+
+- Memanfaatkan fungsi `getpwnam` untuk mencari informasi user berdasarkan nama.
+
+- Jika user tidak ditemukan, program akan menampilkan error dan keluar.
+
+- Mengembalikan UID user yang ditemukan.
 
 ### D. Menggagalkan semua proses user yang sedang berjalan
+```
+void fail(const char* username){
+    DIR *proc;
+    proc = opendir("/proc");
+    struct dirent *entry;
+    uid_t target_uid = get_uid(username);
+
+    char logpath[256];
+    snprintf(logpath, sizeof(logpath), "logs/%s.log", username);
+    FILE *logfile = fopen(logpath, "a");
+
+    if (!logfile) {
+        perror("Fail to open logfile");
+        closedir(proc);
+        return;
+    }
+
+    while ((entry = readdir(proc)) != NULL) {
+        if (!isdigit(entry->d_name[0])) continue;
+
+        char status_path[256];
+        snprintf(status_path, sizeof(status_path), "/proc/%s/status", entry->d_name);
+
+        FILE *status_file = fopen(status_path, "r");
+        if (!status_file) continue;
+
+        char line[256];
+        uid_t uid = -1;
+        char cmdline[256] = "unknown";
+
+        while (fgets(line, sizeof(line), status_file)) {
+            if (strncmp(line, "Uid:", 4) == 0) {
+                sscanf(line, "Uid:\t%u", &uid);
+            } else if (strncmp(line, "Name:", 5) == 0) {
+                sscanf(line, "Name:\t%255s", cmdline);
+            }
+        }
+        fclose(status_file);
+
+        if (uid == target_uid) {
+            pid_t pid = atoi(entry->d_name);
+            if (kill(pid, SIGKILL) == 0) {
+                fprintf(logfile, "[FAILED] PID %d (command: %s)\n", pid, cmdline);
+                printf("Killed PID %d (%s)\n", pid, cmdline);
+            } else {
+                fprintf(logfile, "[ERROR] Failed killing PID %d (%s)\n", pid, cmdline);
+            }
+        }
+    }
+
+    fclose(logfile);
+    closedir(proc);
+}
+```
+### Penjelasan
+Fungsi fail:
+```
+void fail(const char* username) {
+    DIR *proc;
+    proc = opendir("/proc");
+    struct dirent *entry;
+    uid_t target_uid = get_uid(username);
+```
+- akan membuka direktori `/proc` untuk membaca semua proses yang sedang berjalan di sistem.
+- akan memanggil fungsi `get_uid` untuk mendapatkan UID dari username yang diberikan. UID ini akan digunakan untuk memfilter proses milik user tersebut.
+```
+    char logpath[256];
+    snprintf(logpath, sizeof(logpath), "logs/%s.log", username);
+    FILE *logfile = fopen(logpath, "a");
+```
+- untuk menentukan lokasi file log di direktori logs dengan nama `[username].log`.
+- akan membuka file log untuk mencatat proses-proses yang dihentikan. Jika file gagal dibuka, program akan menampilkan pesan error dan keluar dari fungsi.
+
+```
+    while ((entry = readdir(proc)) != NULL) {
+        if (!isdigit(entry->d_name[0])) continue;
+```
+Membaca isi direktori `/proc`. Hanya subdirektori yang namanya berupa angka (PID) yang diperiksa, karena direktori lain tidak mewakili proses.
+
+```
+        char status_path[256];
+        snprintf(status_path, sizeof(status_path), "/proc/%s/status", entry->d_name);
+        FILE *status_file = fopen(status_path, "r");
+        if (!status_file) continue;
+```
+akan membuka file `/proc/[PID]/status` untuk mendapatkan informasi tentang proses. Jika file tidak dapat dibuka, proses tersebut dilewati.
+```
+        char line[256];
+        uid_t uid = -1;
+        char cmdline[256] = "unknown";
+
+        while (fgets(line, sizeof(line), status_file)) {
+            if (strncmp(line, "Uid:", 4) == 0) {
+                sscanf(line, "Uid:\t%u", &uid);
+            } else if (strncmp(line, "Name:", 5) == 0) {
+                sscanf(line, "Name:\t%255s", cmdline);
+            }
+        }
+        fclose(status_file);
+```
+Akan membaca file status untuk mendapatkan UID dan nama proses:
+- Baris yang dimulai dengan Uid: digunakan untuk mengambil UID proses.
+- Baris yang dimulai dengan Name: digunakan untuk mengambil nama proses.
+- UID dan nama proses disimpan dalam variabel uid dan cmdline.
+
+```
+        if (uid == target_uid) {
+            pid_t pid = atoi(entry->d_name);
+            if (kill(pid, SIGKILL) == 0) {
+                fprintf(logfile, "[FAILED] PID %d (command: %s)\n", pid, cmdline);
+                printf("Killed PID %d (%s)\n", pid, cmdline);
+            } else {
+                fprintf(logfile, "[ERROR] Failed killing PID %d (%s)\n", pid, cmdline);
+            }
+        }
+    }
+```
+- Jika UID proses cocok dengan UID target, proses dihentikan menggunakan sinyal SIGKILL.
+
+- Hasil dari upaya ini dicatat ke file log:
+
+- Jika proses berhasil dihentikan, log [FAILED] ditulis.
+
+- Jika gagal, log [ERROR] ditulis.
+
+- Informasi yang dicatat meliputi PID dan nama proses `(cmdline)`.
+
+```
+    fclose(logfile);
+    closedir(proc);
+}
+```
+akan menutup file log dan direktori /proc setelah semua proses selesai diproses.
+
+
 
 ### E. Mengizinkan user untuk kembali menjalankan proses
+```
+void revert(const char *username) {
+    printf("Mode normal dipulihkan untuk user %s. Proses baru dapat dijalankan kembali.\n", username);
+    
+    char log_entry[256];
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(log_entry, sizeof(log_entry), "[%d:%m:%Y]-[%H:%M:%S]_%s_REVERT\n", t);
+    FILE *logFile = fopen("debugmon.log", "a");
+    if (logFile != NULL) {
+        fprintf(logFile, "%s", log_entry);
+        fclose(logFile);
+    }
+}
+```
+### Penjelasan
+```
+printf("Mode normal dipulihkan untuk user %s. Proses baru dapat dijalankan kembali.\n", username);
+```
+Memberitahu pengguna bahwa mode normal untuk username telah dipulihkan, dan proses baru dapat dijalankan kembali.
+```
+char log_entry[256];
+time_t now = time(NULL);
+struct tm *t = localtime(&now);
+strftime(log_entry, sizeof(log_entry), "[%d:%m:%Y]-[%H:%M:%S]_%s_REVERT\n", t);
+```
+Membuat string log yang mencatat waktu saat mode dipulihkan. Format waktu diambil dari sistem saat ini, kemudian diubah menjadi format `[dd:mm:yyyy]-[hh:mm:ss]_username_REVERT`.
+
+```
+FILE *logFile = fopen("debugmon.log", "a");
+if (logFile != NULL) {
+    fprintf(logFile, "%s", log_entry);
+    fclose(logFile);
+}
+```
+- Membuka file log `debugmon.log` dalam mode append untuk menambahkan entri log.
+- Jika file berhasil dibuka, menulis entri log ke file dan menutupnya.
+- Jika gagal membuka file, aksi log diabaikan tanpa memengaruhi proses utama.
 
 ### F. Mencatat ke dalam file log
+```
+void writeLog(const char *processName, const char *status) {
+    FILE *logFile = fopen("debugmon.log", "a");
+    if (logFile == NULL) {
+        perror("Gagal membuka file log");
+        return;
+    }
+
+    char timestamp[100];
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    strftime(timestamp, sizeof(timestamp), "[%d:%m:%Y]-[%H:%M:%S]", t);
+
+    fprintf(logFile, "%s_%s_%s\n", timestamp, processName, status);
+    fclose(logFile);
+}
+
+void list_processes(const char* username) {
+    printf("Listing processes for user: %s\n", username);
+}
+
+void run_daemon(const char* username) {
+    printf("Running daemon for user: %s\n", username);
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <list|daemon> <user>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    const char *command = argv[1];
+    const char *username = argv[2];
+
+    if (strcmp(command, "list") == 0) {
+        list_processes(username);
+    } else if (strcmp(command, "daemon") == 0) {
+        run_daemon(username);
+    } else if (strcmp(command, "stop") == 0) {
+        stop(username);
+    } 
+    else if (strcmp(command, "fail") == 0) {
+        fail(username);
+    } 
+    else if (strcmp(command, "revert") == 0) {
+        revert(username);
+    }
+    else {
+        fprintf(stderr, "Invalid command. Use 'list' or 'daemon'.\n");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+```
+### Penjelasan
+#### Fungsi `writeLog`
+
+Fungsi ini digunakan untuk mencatat log aktivitas proses ke file log `debugmon.log`.
+
+```
+FILE *logFile = fopen("debugmon.log", "a");
+if (logFile == NULL) {
+    perror("Gagal membuka file log");
+    return;
+}
+```
+- Membuka file `debugmon.log` dalam mode append `(a)` untuk menambahkan entri log baru.
+- Jika gagal membuka file, fungsi menampilkan pesan kesalahan dan langsung keluar.
+
+```
+char timestamp[100];
+time_t now = time(NULL);
+struct tm *t = localtime(&now);
+strftime(timestamp, sizeof(timestamp), "[%d:%m:%Y]-[%H:%M:%S]", t);
+```
+untuk membuat timestamp dalam format `[dd:mm:yyyy]-[hh:mm:ss]` menggunakan waktu saat ini.
+
+```
+fprintf(logFile, "%s_%s_%s\n", timestamp, processName, status);
+fclose(logFile);
+```
+- Menulis log ke file dalam format:
+`[timestamp]_[processName]_[status], misalnya:
+[18:04:2025]-[12:34:56]_myProcess_RUNNING`.
+- akan Menutup file setelah selesai menulis.
+
+```
+if (argc < 3) {
+    fprintf(stderr, "Usage: %s <list|daemon|stop|fail|revert> <user>\n", argv[0]);
+    return EXIT_FAILURE;
+}
+```
+- Mengecek jumlah argumen yang diberikan. Jika kurang dari 3, program mencetak format penggunaan yang benar dan keluar dengan kode gagal `(EXIT_FAILURE)`.
+
+Argumen pertama `(argv[0])` adalah nama program, argumen kedua `(argv[1])` adalah perintah, dan argumen ketiga `(argv[2])`` adalah nama user.
+```
+const char *command = argv[1];
+const char *username = argv[2];
+``` 
+Variabel command menyimpan perintah yang diberikan user.
+
+Variabel username menyimpan nama user yang akan diproses.
+
+Cabang Perintah
+list
+```
+if (strcmp(command, "list") == 0) {
+    list_processes(username);
+}
+```
+Jika perintah adalah list, fungsi `list_processes` dipanggil untuk menampilkan daftar proses milik user tertentu.
+
+#### daemon
+```
+else if (strcmp(command, "daemon") == 0) {
+    run_daemon(username);
+}
+```
+Jika perintah adalah daemon, fungsi `run_daemon` dipanggil untuk menjalankan daemon yang memantau aktivitas proses milik user tertentu.
+
+#### stop
+```
+else if (strcmp(command, "stop") == 0) {
+    stop(username);
+}
+```
+Jika perintah adalah stop, fungsi stop dipanggil untuk menghentikan daemon yang berjalan untuk user tertentu.
+
+#### fail
+```
+else if (strcmp(command, "fail") == 0) {
+    fail(username);
+}
+```
+Jika perintah adalah fail, fungsi fail dipanggil untuk mengakhiri semua proses milik user tertentu dan mencatatnya dalam log.
+
+#### revert
+```
+else if (strcmp(command, "revert") == 0) {
+    revert(username);
+}
+```
+Jika perintah adalah revert, fungsi revert dipanggil untuk memulihkan mode normal bagi user, memungkinkan proses baru dijalankan kembali.
+
+#### Kesalahan Perintah
+```
+else {
+    fprintf(stderr, "Invalid command. Use 'list', 'daemon', 'stop', 'fail', or 'revert'.\n");
+    return EXIT_FAILURE;
+}
+```
+Jika perintah tidak sesuai dengan opsi yang valid (list, daemon, stop, fail, atau revert), program mencetak pesan kesalahan dan keluar dengan kode gagal.
+
+#### Return Value
+```
+return EXIT_SUCCESS;
+```
+Jika program berhasil dijalankan tanpa error, program keluar dengan kode sukses `(EXIT_SUCCESS)`.
