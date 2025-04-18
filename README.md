@@ -247,8 +247,8 @@ void filter() {
         printf("Filter Completed.");
 }
 ```
-Fungsi ini digunakan untuk filtering hasil ekstraksi fille "clues.zip" dengan kriteria satu digit huruf dan angka.
-[REVISI]
+Fungsi ini digunakan untuk filtering hasil ekstraksi fille "clues.zip" dengan kriteria satu digit huruf dan angka.<br>
+**[REVISI]**<br>
 Mengganti penggunaan function system() yang tidak diperbolehkan.
 ```
 void filter() {
@@ -439,8 +439,8 @@ void decode(){
 Hasil dari combine tadi akan dibuka dan membuka file decode.txt tadi dalam mode write yang mana akan menuliskan hasil decode dari combine. Function ini akan mendecode satu persatu char dalam file combine dengan memanfaatkan function rot13decoder, jika sudah akan ditulis ke file "decode.txt" dan akan menutup kedua file yang sudah dibuka.
 
 6. Function main
-[REVISI]
-Mengganti penggunaan function system() yang tidak diperbolehkan.
+**[REVISI]** <br>
+Mengganti penggunaan function system() yang tidak diperbolehkan.<br>
 ```
 
 int main(int argc, char *argv[]) {
@@ -503,9 +503,9 @@ int main(int argc, char *argv[]) {
 Di function main ini terdapat argc dan argv untuk penerimaan argumen pada saat di-run. Di situ juga ada kondisi apabila folder "Clues" belum ditemukan akan mendownload dan mengekstrak file Clues.zip.
 
 ### > Output
-![image](https://github.com/user-attachments/assets/26807569-cdb6-4a89-bb9c-5d9dc3a46226)
-Pada gambar di atas terdapat output dari Combine yaitu code ROT13, setelah di-decode akan menjadi "BewareOfAmpy".
-![image](https://github.com/user-attachments/assets/4b9f0cb0-a209-465e-98f3-236bd1043903)
+![image](https://github.com/user-attachments/assets/26807569-cdb6-4a89-bb9c-5d9dc3a46226)<br>
+Pada gambar di atas terdapat output dari Combine yaitu code ROT13, setelah di-decode akan menjadi "BewareOfAmpy".<br>
+![image](https://github.com/user-attachments/assets/4b9f0cb0-a209-465e-98f3-236bd1043903)<br>
 Apabila "BewareOfAmpy" di-input ke websitenya, akan mengeluarkan output seperti di atas.
 
 ## Soal 2
