@@ -787,3 +787,484 @@ touch starterkit.c
 `dirent.h` =
 `time.h` =
 `signal.h` =
+
+
+
+
+## SOAL 4
+Suatu hari, Nobita menemukan sebuah alat aneh di laci mejanya. Alat ini berbentuk robot kecil dengan mata besar yang selalu berkedip-kedip. Doraemon berkata, "Ini adalah Debugmon! Robot super kepo yang bisa memantau semua aktivitas di komputer!" Namun, alat ini harus digunakan dengan hati-hati. Jika dipakai sembarangan, bisa-bisa komputer Nobita malah error total!
+
+A. Mengetahui semua aktivitas user
+Doraemon ingin melihat apa saja yang sedang dijalankan user di komputernya. Maka, dia mengetik:
+./debugmon list <user>
+Debugmon langsung menampilkan daftar semua proses yang sedang berjalan pada user tersebut beserta PID, command, CPU usage, dan memory usage.
+
+B. Memasang mata-mata dalam mode daemon
+Doraemon ingin agar Debugmon terus memantau user secara otomatis. Doraemon pun menjalankan program ini secara daemon dan melakukan pencatatan ke dalam file log dengan menjalankan:
+./debugmon daemon <user>
+
+C. Menghentikan pengawasan
+User mulai panik karena setiap gerak-geriknya diawasi! Dia pun memohon pada Doraemon untuk menghentikannya dengan:
+./debugmon stop <user>
+
+D. Menggagalkan semua proses user yang sedang berjalan
+Doraemon yang iseng ingin mengerjai user dengan mengetik:
+./debugmon fail <user>
+Debugmon langsung menggagalkan semua proses yang sedang berjalan dan menulis status proses ke dalam file log dengan status FAILED. Selain menggagalkan, user juga tidak bisa menjalankan proses lain dalam mode ini.
+
+E. Mengizinkan user untuk kembali menjalankan proses
+Karena kasihan, Shizuka meminta Doraemon untuk memperbaiki semuanya. Doraemon pun menjalankan:
+./debugmon revert <user>
+Debugmon kembali ke mode normal dan bisa menjalankan proses lain seperti biasa.
+
+F. Mencatat ke dalam file log
+Sebagai dokumentasi untuk mengetahui apa saja yang debugmon lakukan di komputer user, debugmon melakukan pencatatan dan penyimpanan ke dalam file debugmon.log untuk semua proses yang dijalankan dengan format
+[dd:mm:yyyy]-[hh:mm:ss]_nama-process_STATUS(RUNNING/FAILED)
+Untuk poin b, c, dan e, status proses adalah RUNNING. Sedangkan untuk poin d, status proses adalah FAILED. 
+
+
+### struktur soal 
+- debugmon.c
+
+
+## Jawaban
+
+### A. Mengetahui semua aktivitas user
+```
+void list_user_processes(const char *username) {
+    DIR *proc_dir;
+    struct dirent *entry;
+
+    proc_dir = opendir("/proc");
+    if (!proc_dir) {
+        perror("Failed to open /proc directory");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("%-10s %-10s %-10s %-10s\n", "PID", "COMMAND", "CPU%", "MEM%");
+    while ((entry = readdir(proc_dir)) != NULL) {
+        if (!isdigit(entry->d_name[0]))
+            continue;
+
+        char stat_path[256], cmdline_path[256], status_path[256];
+        FILE *stat_file, *cmdline_file, *status_file;
+        char line[1024];
+        int pid = atoi(entry->d_name);
+
+        snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", pid);
+        snprintf(cmdline_path, sizeof(cmdline_path), "/proc/%d/cmdline", pid);
+        snprintf(status_path, sizeof(status_path), "/proc/%d/status", pid);
+
+        status_file = fopen(status_path, "r");
+        if (!status_file) continue;
+
+        int uid;
+        while (fgets(line, sizeof(line), status_file)) {
+            if (strncmp(line, "Uid:", 4) == 0) {
+                sscanf(line, "Uid: %d", &uid);
+                break;
+            }
+        }
+        fclose(status_file);
+
+        char *user_from_uid = getpwuid(uid)->pw_name;
+        if (strcmp(user_from_uid, username) != 0)
+            continue;
+
+        stat_file = fopen(stat_path, "r");
+        if (!stat_file) continue;
+
+        unsigned long utime, stime, rss;
+        fscanf(stat_file, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu %*d %*d %*d %*d %*d %*d %*d %*d %lu", 
+                &utime, &stime, &rss);
+        fclose(stat_file);
+
+        unsigned long total_time = utime + stime;
+
+        cmdline_file = fopen(cmdline_path, "r");
+        if (!cmdline_file) continue;
+
+        char cmdline[256];
+        fgets(cmdline, sizeof(cmdline), cmdline_file);
+        fclose(cmdline_file);
+
+        if (strlen(cmdline) == 0)
+            snprintf(cmdline, sizeof(cmdline), "[%d]", pid);
+
+        printf("%-10d %-10s %-10lu %-10lu\n", pid, cmdline, total_time, rss);
+    }
+
+    closedir(proc_dir);
+}
+```
+
+### > Penjelasan
+#### 1. Deklarasi Variabel dan Direktori
+```
+void list_user_processes(const char *username) {
+    DIR *proc_dir;
+    struct dirent *entry;
+
+``` 
+```DIR *proc_dir``` mengarah ke direktori ```/proc``` dan dia akan membaca informasi proses yang sedang berjalan.
+
+```struct dirent *entry``` untuk membaca entri file atau direktori dalam ```/proc```.
+
+#### 2. Membuka Direktori ```/proc```
+```
+proc_dir = opendir("/proc");
+if (!proc_dir) {
+    perror("Failed to open /proc directory");
+    exit(EXIT_FAILURE);
+}
+```
+```opendir``` untuk membuka direktori ```/proc``` dan membaca entri proses.
+
+```perror dan exit``` untuk menangani error jika direktori ```/proc``` tidak dapat diakses.
+
+#### 3. Header Tabel
+```
+printf("%-10s %-10s %-10s %-10s\n", "PID", "COMMAND", "CPU%", "MEM%");
+```
+Untuk menampilkan header tabel untuk kolom: PID, COMMAND, CPU%, dan MEM%.
+
+#### 4. Iterasi Direktori ```/proc```
+```
+while ((entry = readdir(proc_dir)) != NULL) {
+    if (!isdigit(entry->d_name[0]))
+        continue;
+```
+
+```readdir``` untuk membaca setiap entri dalam direktori ```/proc```.
+
+```isdigit(entry->d_name[0])``` untuk memeriksa apakah nama entri dimulai dengan angka, karena hanya entri dengan angka yang mewakili proses.
+
+#### 5. Path untuk File Proses
+```
+char stat_path[256], cmdline_path[256], status_path[256];
+snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", pid);
+snprintf(cmdline_path, sizeof(cmdline_path), "/proc/%d/cmdline", pid);
+snprintf(status_path, sizeof(status_path), "/proc/%d/status", pid);
+```
+
+```snprintf``` untuk membuat path absolut untuk file yang berisi informasi proses:
+
+```/proc/[PID]/stat``` berisi statistik proses.
+
+```/proc/[PID]/cmdline``` berisi command line yang digunakan untuk memulai proses.
+
+```/proc/[PID]/status``` berisi metadata proses, termasuk UID.
+
+
+#### 6. Membaca UID dari file status
+```
+status_file = fopen(status_path, "r");
+if (!status_file) continue;
+while (fgets(line, sizeof(line), status_file)) {
+    if (strncmp(line, "Uid:", 4) == 0) {
+        sscanf(line, "Uid: %d", &uid);
+        break;
+    }
+}
+fclose(status_file);
+```
+
+akan membuka file ```/proc/[PID]/status``` untuk membaca UID proses dan mencocokkannya dengan username target.
+
+#### 7. Membaca statistik proses
+
+```
+stat_file = fopen(stat_path, "r");
+if (!stat_file) continue;
+unsigned long utime, stime, rss;
+fscanf(stat_file, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu %*d %*d %*d %*d %*d %*d %*d %*d %lu", 
+        &utime, &stime, &rss);
+fclose(stat_file);
+```
+akan membaca file ```/proc/[PID]/stat``` untuk mendapatkan waktu CPU (utime dan stime) serta penggunaan memori (rss) dari proses.
+
+
+#### 8. Membaca nama command
+```
+cmdline_file = fopen(cmdline_path, "r");
+if (!cmdline_file) continue;
+char cmdline[256];
+fgets(cmdline, sizeof(cmdline), cmdline_file);
+fclose(cmdline_file);
+
+if (strlen(cmdline) == 0)
+    snprintf(cmdline, sizeof(cmdline), "[%d]", pid);
+```
+
+Membaca file ```/proc/[PID]/cmdline``` untuk mendapatkan command line yang digunakan untuk menjalankan proses. Jika kosong, menggantinya dengan [PID].
+
+#### 9. Menampilkan informasi proses
+```
+printf("%-10d %-10s %-10lu %-10lu\n", pid, cmdline, total_time, rss);
+```
+Menampilkan PID, nama command, waktu CPU, dan memori proses dalam format tabel.
+
+#### 10. Menutup direktori
+```
+closedir(proc_dir);
+```
+Menutup direktori ```/proc``` setelah selesai membaca semua proses.
+
+
+### B. Memasang mata-mata dalam mode daemon
+```
+FILE *log_file = NULL;
+
+void log_process(const char* process_name, const char* status, const char* username) {
+    if (!log_file) {
+        char log_path[256];
+        snprintf(log_path, sizeof(log_path), "/home/dinda/debugmon.log", username);
+        
+        log_file = fopen(log_path, "a");
+        if (!log_file) {
+            perror("Failed to open debugmon.log");
+            return;
+        }
+    }
+
+    time_t now = time(NULL);
+    struct tm* t = localtime(&now);
+
+    fprintf(log_file, "[%02d/%02d/%04d %02d:%02d:%02d] %s : %s\n",
+        t->tm_mday, t->tm_mon + 1, t->tm_year + 1900,
+        t->tm_hour, t->tm_min, t->tm_sec,
+        process_name, status);
+
+    fflush(log_file);
+}
+
+void cleanup_log() {
+    if (log_file) {
+        fclose(log_file);
+        log_file = NULL;
+    }
+}
+
+void signal_handler(int sig) {
+    cleanup_log();
+    exit(0);
+}
+
+void daemon_mode(const char* user) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("First fork failed");
+        exit(1);
+    }
+    if (pid > 0) exit(0);
+
+    if (setsid() < 0) {
+        perror("setsid failed");
+        exit(1);
+    }
+
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGTERM, signal_handler);
+
+    pid = fork();
+    if (pid < 0) {
+        perror("Second fork failed");
+        exit(1);
+    }
+    if (pid > 0) exit(0);
+
+    umask(0);
+    chdir("/");
+
+    // Alihkan file descriptor ke /dev/null
+    int fd = open("/dev/null", O_RDWR);
+    if (fd != -1) {
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        if (fd > 2) close(fd);
+    }
+
+    while (1) {
+        struct dirent* entry;
+        DIR* dir = opendir("/proc");
+        if (!dir) {
+            log_process("debugmon", "ERROR: Failed to open /proc", user);
+            cleanup_log();
+            sleep(10);
+            continue;
+        }
+
+        while ((entry = readdir(dir)) != NULL) {
+            if (isdigit(entry->d_name[0])) {
+                char path[256], cmdline[256];
+                snprintf(path, sizeof(path), "/proc/%s/comm", entry->d_name);
+
+                FILE* fp = fopen(path, "r");
+                if (fp) {
+                    if (fgets(cmdline, sizeof(cmdline), fp)) {
+                        cmdline[strcspn(cmdline, "\n")] = '\0';
+                        log_process(cmdline, "RUNNING", user);
+                    }
+                    fclose(fp);
+                }
+            }
+        }
+
+        closedir(dir);
+        sleep(10);
+    }
+}
+```
+
+### > Penjelasan
+
+#### 1. Logging aktivitas proses
+```
+void log_process(const char* process_name, const char* status, const char* username) {
+    if (!log_file) {
+        char log_path[256];
+        snprintf(log_path, sizeof(log_path), "/home/dinda/debugmon.log", username);
+        log_file = fopen(log_path, "a");
+        if (!log_file) {
+            perror("Failed to open debugmon.log");
+            return;
+        }
+    }
+
+    time_t now = time(NULL);
+    struct tm* t = localtime(&now);
+
+    fprintf(log_file, "[%02d/%02d/%04d %02d:%02d:%02d] %s : %s\n",
+        t->tm_mday, t->tm_mon + 1, t->tm_year + 1900,
+        t->tm_hour, t->tm_min, t->tm_sec,
+        process_name, status);
+
+    fflush(log_file);
+}
+```
+- Akan membuka file log ```(/home/dinda/debugmon.log)``` untuk mencatat aktivitas proses.
+
+- Akan menulis informasi log berupa waktu, nama proses, dan statusnya (misalnya "RUNNING").
+
+- File log dibuka dalam mode append agar data sebelumnya tidak terhapus.
+
+#### 2. Membersihkan file log saat keluar
+```
+void cleanup_log() {
+    if (log_file) {
+        fclose(log_file);
+        log_file = NULL;
+    }
+}
+```
+Akan menutup file log jika sudah selesai digunakan, memastikan tidak ada kebocoran resource.
+
+#### 3. Menangani sinyal untuk keluar dengan bersih
+```
+void signal_handler(int sig) {
+    cleanup_log();
+    exit(0);
+}
+```
+Ketika proses menerima sinyal seperti SIGTERM, file log ditutup dengan bersih sebelum program keluar.
+
+#### 4. Mode daemon
+```
+void daemon_mode(const char* user) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("First fork failed");
+        exit(1);
+    }
+    if (pid > 0) exit(0);
+
+    if (setsid() < 0) {
+        perror("setsid failed");
+        exit(1);
+    }
+
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGTERM, signal_handler);
+
+    pid = fork();
+    if (pid < 0) {
+        perror("Second fork failed");
+        exit(1);
+    }
+    if (pid > 0) exit(0);
+
+    umask(0);
+    chdir("/");
+}
+```
+Fungsi ini membuat proses menjadi daemon
+
+- Fork pertama: Mengakhiri proses induk agar daemon berjalan di background.
+
+- Fork kedua: Menghindari daemon menjadi pemimpin sesi.
+
+Lalu, akan memutuskan hubungan dengan terminal dan mengatur direktori kerja ke root ```(chdir("/"))```.
+
+#### 5. Pengalihan file descriptor
+```
+int fd = open("/dev/null", O_RDWR);
+if (fd != -1) {
+    dup2(fd, STDIN_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    dup2(fd, STDERR_FILENO);
+    if (fd > 2) close(fd);
+}
+```
+
+Mengalihkan input, output, dan error ```ke /dev/null``` agar daemon tidak mengganggu terminal.
+
+#### 6. Pemantauan proses di ```/proc```
+```
+while (1) {
+    struct dirent* entry;
+    DIR* dir = opendir("/proc");
+    if (!dir) {
+        log_process("debugmon", "ERROR: Failed to open /proc", user);
+        cleanup_log();
+        sleep(10);
+        continue;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (isdigit(entry->d_name[0])) {
+            char path[256], cmdline[256];
+            snprintf(path, sizeof(path), "/proc/%s/comm", entry->d_name);
+
+            FILE* fp = fopen(path, "r");
+            if (fp) {
+                if (fgets(cmdline, sizeof(cmdline), fp)) {
+                    cmdline[strcspn(cmdline, "\n")] = '\0';
+                    log_process(cmdline, "RUNNING", user);
+                }
+                fclose(fp);
+            }
+        }
+    }
+
+    closedir(dir);
+    sleep(10);
+}
+```
+Akan membuka direktori ```/proc``` untuk membaca semua proses yang sedang berjalan.
+
+Untuk setiap proses:
+
+- Membaca nama proses dari file ```/proc/[PID]/comm```.
+
+- Menuliskan aktivitas proses (misalnya, status "RUNNING") ke file log.
+
+Lalu proses ini dilakukan terus-menerus setiap 10 detik.
+
+### C. Menghentikan pengawasan
+
+### D. Menggagalkan semua proses user yang sedang berjalan
+
+### E. Mengizinkan user untuk kembali menjalankan proses
+
+### F. Mencatat ke dalam file log
